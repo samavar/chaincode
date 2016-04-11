@@ -3,43 +3,30 @@ package main
 import (
     "errors"
     "fmt"
-
+    "encoding/json"
     "github.com/openblockchain/obc-peer/openchain/chaincode/shim"
 )
 
 const data_hash = "dataHash"
 const user_key = "userKey"
 const idp_key = "idpKey"
+var documentIndex = "_documentIndex"
 
 // SimpleChaincode example simple Chaincode implementation
-type BundleChaincode struct {
+type DocumentChaincode struct {
 }
 
-// should call with args dataHash, userKey, idpKey
-func (t *BundleChaincode) init(stub *shim.ChaincodeStub, args []string) ([]byte, error) {
+type Document struct {
+    DataHash, UserKey, IdpKey string
+}
+
+func (t *DocumentChaincode) init(stub *shim.ChaincodeStub, args []string) ([]byte, error) {
     var err error
+    var empty []string
     
-    if len(args) != 3 {
-        return nil, errors.New("Incorrect number of arguments. Expecting 3")
-    }
+    jsonAsBytes, _ := json.Marshal(empty)
     
-    dataHash := args[0]
-    userKey := args[1]
-    idpKey := args[2]
-    
-    fmt.Printf("dataHash = %s, userKey = %s, idpKey = %s\n", dataHash, userKey, idpKey)
-    
-    err = stub.PutState(data_hash, []byte(dataHash))
-    if err != nil {
-        return nil, err
-    }
-    
-    err = stub.PutState(user_key, []byte(userKey))
-    if err != nil {
-        return nil, err
-    }
-    
-    err = stub.PutState(idp_key, []byte(idpKey))
+    err = stub.PutState(documentIndex, jsonAsBytes)
     if err != nil {
         return nil, err
     }
@@ -47,27 +34,23 @@ func (t *BundleChaincode) init(stub *shim.ChaincodeStub, args []string) ([]byte,
     return nil, nil
 }
 
-func (t *BundleChaincode) query(stub *shim.ChaincodeStub, args []string) ([]byte, error) {
+func (t *DocumentChaincode) query(stub *shim.ChaincodeStub, args []string) ([]byte, error) {
     var err error
     
-    dataHash, err := stub.GetState(data_hash)
-    if err != nil {
-        return nil, err
-    }
-    userKey, err := stub.GetState(user_key)
-    if err != nil {
-        return nil, err
-    }
-    idpKey, err := stub.GetState(idp_key)
-    if err != nil {
-        return nil, err
+    if len(args) != 1 {
+        return nil, errors.New("Incorrect number of arguments. Expecting 1")
     }
     
-    json := fmt.Sprintf("{\"dataHash\":\"%s\",\"userKey\":\"%s\",\"idpKey\":\"%s\"}", dataHash, userKey, idpKey)
-    return []byte(json), nil
+    document_hash := args[0]
+    document, err := stub.GetState(document_hash)
+    if err != nil {
+        return nil, err
+    }
+
+    return document, nil
 }
 
-func (t *BundleChaincode) getUserKey(stub *shim.ChaincodeStub, args []string) ([]byte, error) {
+func (t *DocumentChaincode) getUserKey(stub *shim.ChaincodeStub, args []string) ([]byte, error) {
     var err error
     
     userKey, err := stub.GetState(user_key)
@@ -77,28 +60,79 @@ func (t *BundleChaincode) getUserKey(stub *shim.ChaincodeStub, args []string) ([
     return userKey, nil
 }
 
-func (t *BundleChaincode) Query(stub *shim.ChaincodeStub, function string, args []string) ([]byte, error) {
+func (t* DocumentChaincode) getAllIndexes(stub *shim.ChaincodeStub, args []string) ([]byte, error) {
+    var err error
+    
+    allHashes, err := stub.GetState(documentIndex)
+    if err != nil {
+        return nil, err
+    }
+    
+    return allHashes, nil
+}
+
+func (t *DocumentChaincode) Query(stub *shim.ChaincodeStub, function string, args []string) ([]byte, error) {
     if function == "query" {
         // Initialize the entities and their asset holdings
         return t.query(stub, args)
     } else if function == "getUserKey" {
         return t.getUserKey(stub, args)
+    } else if function == "getAllIndexes" {
+        return t.getAllIndexes(stub, args)
     }
     
     return nil, errors.New("Received unknown function query")
 }
 
-func (t *BundleChaincode) Run(stub *shim.ChaincodeStub, function string, args []string) ([]byte, error) {
+func (t *DocumentChaincode) insert(stub *shim.ChaincodeStub, args []string) ([]byte, error) {
+    var err error
+    
+    if len(args) != 3 {
+        return nil, errors.New("Incorrect number of arguments. Expecting 3")
+    }
+    document := Document{DataHash: args[0], UserKey: args[1], IdpKey : args[2]}
+    fmt.Printf("inserting document with dataHash = %s, userKey = %s, idpKey = %s\n", document.DataHash, document.UserKey, document.IdpKey)
+    
+    jsonAsBytes, _ := json.Marshal(document)
+    
+    err = stub.PutState(document.DataHash, jsonAsBytes);
+    if err != nil {
+        return nil, err
+    }
+    
+    
+    jsonAsBytes, err = stub.GetState(documentIndex)
+    if err != nil {
+        return nil, err
+    }
+    var allHashes []string
+    _ = json.Unmarshal(jsonAsBytes, allHashes)
+    
+    allHashes = append(allHashes, document.DataHash)
+    
+    jsonAsBytes,_ = json.Marshal(allHashes)
+    err = stub.PutState(documentIndex, jsonAsBytes)
+    if(err != nil) {
+        return nil, err
+    }
+    
+    
+    return nil, nil
+}
+
+func (t *DocumentChaincode) Run(stub *shim.ChaincodeStub, function string, args []string) ([]byte, error) {        
     if function == "init" {
         // Initialize the entities and their asset holdings
         return t.init(stub, args)
+    } else if function == "insert" {
+        return t.insert(stub, args);
     }
     
     return nil, errors.New("Received unknown function invocation")
 }
 
 func main() {
-    err := shim.Start(new(BundleChaincode))
+    err := shim.Start(new(DocumentChaincode))
     if err != nil {
         fmt.Printf("Error starting Bundle chaincode: %s", err)
     }
