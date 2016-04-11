@@ -106,7 +106,7 @@ func (t *DocumentChaincode) insert(stub *shim.ChaincodeStub, args []string) ([]b
         return nil, err
     }
     var allHashes []string
-    _ = json.Unmarshal(jsonAsBytes, allHashes)
+    _ = json.Unmarshal(jsonAsBytes, &allHashes)
     
     allHashes = append(allHashes, document.DataHash)
     
