@@ -24,6 +24,21 @@ func (t *DocumentChaincode) init(stub *shim.ChaincodeStub, args []string) ([]byt
     var err error
     var empty []string
     
+    
+    if len(args) != 0 && len(args) !=3 {
+        return nil, errors.New("Incorrect number of arguments. Expecting 0 or 3")
+    }
+    
+    if len(args) == 3 {
+        fmt.Printf("deploying, number of arguments is 3")
+        _, err = t.insert(stub, args)
+        if err != nil {
+            return nil, err
+        }
+        empty = append(empty, args[0])        
+    }    
+    fmt.Printf("inserting document hashesh", empty)
+    
     jsonAsBytes, _ := json.Marshal(empty)
     
     err = stub.PutState(documentIndex, jsonAsBytes)
